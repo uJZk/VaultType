@@ -35,6 +35,7 @@
   "hello.unavailable": "Windows Hello is not available. Set it up in Windows Settings first.",
   "hello.tpmUnavailable": "A usable TPM is required to keep Windows Hello available after restart. Check your TPM or turn off persistence.",
   "hello.failed": "Windows Hello could not unlock this vault. Use your master password to restore access.",
+  "hello.timeout": "Windows Hello timed out and was canceled. Use your master password, then try setting up Hello again.",
   "hello.enrollCanceled": "Windows Hello setup was canceled. Master-password unlock remains selected.",
   "hello.enrollFailed": "Windows Hello setup failed. Master-password unlock remains selected. {0}",
   "signin.title": "Sign in",

@@ -35,6 +35,7 @@
   "hello.unavailable": "Windows Hello ist nicht verfügbar. Richte es zuerst in den Windows-Einstellungen ein.",
   "hello.tpmUnavailable": "Für Windows Hello nach einem Neustart ist ein nutzbares TPM erforderlich. Prüfe das TPM oder deaktiviere die Speicherung.",
   "hello.failed": "Windows Hello konnte diesen Tresor nicht entsperren. Verwende dein Master-Passwort, um den Zugriff wiederherzustellen.",
+  "hello.timeout": "Windows Hello hat das Zeitlimit überschritten und wurde abgebrochen. Verwende dein Master-Passwort und richte Hello später erneut ein.",
   "hello.enrollCanceled": "Die Einrichtung von Windows Hello wurde abgebrochen. Entsperren mit Master-Passwort bleibt ausgewählt.",
   "hello.enrollFailed": "Die Einrichtung von Windows Hello ist fehlgeschlagen. Entsperren mit Master-Passwort bleibt ausgewählt. {0}",
   "signin.title": "Anmelden",

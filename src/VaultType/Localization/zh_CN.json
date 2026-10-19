@@ -35,6 +35,7 @@
   "hello.unavailable": "Windows Hello 不可用，请先在 Windows 设置中配置。",
   "hello.tpmUnavailable": "重启后保留 Windows Hello 解锁能力需要可用的 TPM。请检查 TPM 或关闭持久化。",
   "hello.failed": "Windows Hello 无法解锁此保管库，请使用主密码恢复访问。",
+  "hello.timeout": "Windows Hello 超时，已取消。请使用主密码，之后再尝试设置 Hello。",
   "hello.enrollCanceled": "已取消 Windows Hello 设置，仍使用主密码解锁。",
   "hello.enrollFailed": "Windows Hello 设置失败，仍使用主密码解锁。{0}",
   "signin.title": "登录",

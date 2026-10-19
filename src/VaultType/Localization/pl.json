@@ -35,6 +35,7 @@
   "hello.unavailable": "Windows Hello jest niedostępne. Najpierw skonfiguruj je w ustawieniach Windows.",
   "hello.tpmUnavailable": "Zachowanie Windows Hello po ponownym uruchomieniu wymaga działającego modułu TPM. Sprawdź TPM lub wyłącz trwały zapis.",
   "hello.failed": "Windows Hello nie może odblokować tego sejfu. Użyj hasła głównego, aby przywrócić dostęp.",
+  "hello.timeout": "Upłynął limit czasu Windows Hello. Operacja została anulowana. Użyj hasła głównego i spróbuj ponownie skonfigurować Hello.",
   "hello.enrollCanceled": "Anulowano konfigurację Windows Hello. Nadal wybrane jest odblokowanie hasłem głównym.",
   "hello.enrollFailed": "Konfiguracja Windows Hello nie powiodła się. Nadal wybrane jest odblokowanie hasłem głównym. {0}",
   "signin.title": "Zaloguj się",

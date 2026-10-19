@@ -9,6 +9,8 @@ dotnet run --project tests/VaultType.Hello.Tests -c Release
 They verify authentication of ciphertext and enrollment context, malformed data rejection,
 account/server/email isolation, policy tampering, nonce renewal and serialization. A simulated
 256-byte TPM ciphertext tests the outer format only; it does not verify hardware security.
+They also check that interactive operations do not queue, cancellation is propagated, and an
+uncompleted cancellation-aware operation is canceled at its deadline and releases the gate.
 
 ## Windows acceptance checks
 
@@ -53,6 +55,12 @@ Argon2id accounts where available. No Windows Hello or TPM hardware checks can r
     Check that canceling account edits leaves the current method usable.
 12. Repeat enrollment/unlock in portable and MSIX editions. Verify localization, keyboard focus,
     master-password fallback layout, small-screen scrolling and existing password/PIN unlock.
+13. Re-test the reported endless prompt after saving an account. Settings must allow another app
+    above it; native Hello must cover VaultType. Initial enrollment may prompt for both creation
+    and signing, but it must finish or cancel. Cancel must return to password unlock without an
+    automatic retry. A stuck native operation has a two-minute deadline. If it still fails, record
+    the `HELLO_CREATE` / `HELLO_SIGN` stage and error shown; passing coordinator tests alone does
+    not establish that this device-specific loop is resolved.
 
 Native acceptance remains required before release. Passing the portable tests or cross-compiling
 the application does not establish that Hello prompts or TPM operations work on a Windows device.

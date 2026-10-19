@@ -35,6 +35,7 @@
   "hello.unavailable": "Windows Hello est indisponible. Configurez-le dans les paramètres Windows.",
   "hello.tpmUnavailable": "Un TPM utilisable est nécessaire pour conserver Windows Hello après redémarrage. Vérifiez le TPM ou désactivez la persistance.",
   "hello.failed": "Windows Hello ne peut pas déverrouiller ce coffre. Utilisez votre mot de passe maître pour rétablir l’accès.",
+  "hello.timeout": "Le délai de Windows Hello est dépassé. L’opération a été annulée. Utilisez votre mot de passe maître, puis réessayez la configuration.",
   "hello.enrollCanceled": "La configuration de Windows Hello a été annulée. Le déverrouillage par mot de passe maître reste sélectionné.",
   "hello.enrollFailed": "La configuration de Windows Hello a échoué. Le déverrouillage par mot de passe maître reste sélectionné. {0}",
   "signin.title": "Se connecter",

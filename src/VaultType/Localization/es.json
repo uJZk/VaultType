@@ -35,6 +35,7 @@
   "hello.unavailable": "Windows Hello no está disponible. Configúralo primero en los ajustes de Windows.",
   "hello.tpmUnavailable": "Se requiere un TPM disponible para mantener Windows Hello tras reiniciar. Comprueba el TPM o desactiva la persistencia.",
   "hello.failed": "Windows Hello no pudo desbloquear esta bóveda. Usa tu contraseña maestra para recuperar el acceso.",
+  "hello.timeout": "Windows Hello agotó el tiempo de espera y se canceló. Usa tu contraseña maestra e intenta configurar Hello de nuevo.",
   "hello.enrollCanceled": "Se canceló la configuración de Windows Hello. Sigue seleccionado el desbloqueo con contraseña maestra.",
   "hello.enrollFailed": "Falló la configuración de Windows Hello. Sigue seleccionado el desbloqueo con contraseña maestra. {0}",
   "signin.title": "Iniciar sesión",

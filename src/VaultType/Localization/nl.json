@@ -35,6 +35,7 @@
   "hello.unavailable": "Windows Hello is niet beschikbaar. Stel het eerst in via de Windows-instellingen.",
   "hello.tpmUnavailable": "Een bruikbare TPM is vereist om Windows Hello na herstart beschikbaar te houden. Controleer de TPM of schakel de opslag uit.",
   "hello.failed": "Windows Hello kon deze kluis niet ontgrendelen. Gebruik je hoofdwachtwoord om de toegang te herstellen.",
+  "hello.timeout": "Windows Hello heeft de tijdslimiet overschreden en is geannuleerd. Gebruik je hoofdwachtwoord en probeer Hello later opnieuw in te stellen.",
   "hello.enrollCanceled": "Het instellen van Windows Hello is geannuleerd. Ontgrendeling met hoofdwachtwoord blijft geselecteerd.",
   "hello.enrollFailed": "Het instellen van Windows Hello is mislukt. Ontgrendeling met hoofdwachtwoord blijft geselecteerd. {0}",
   "signin.title": "Aanmelden",

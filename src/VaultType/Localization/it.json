@@ -35,6 +35,7 @@
   "hello.unavailable": "Windows Hello non è disponibile. Configuralo prima nelle impostazioni di Windows.",
   "hello.tpmUnavailable": "È necessario un TPM utilizzabile per mantenere Windows Hello dopo il riavvio. Controlla il TPM o disattiva la persistenza.",
   "hello.failed": "Windows Hello non ha potuto sbloccare questa cassaforte. Usa la password principale per ripristinare l’accesso.",
+  "hello.timeout": "Windows Hello è scaduto ed è stato annullato. Usa la password principale, poi riprova a configurare Hello.",
   "hello.enrollCanceled": "Configurazione di Windows Hello annullata. Rimane selezionato lo sblocco con password principale.",
   "hello.enrollFailed": "Configurazione di Windows Hello non riuscita. Rimane selezionato lo sblocco con password principale. {0}",
   "signin.title": "Accedi",

@@ -4,6 +4,7 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using Microsoft.Win32.SafeHandles;
 using Windows.Security.Credentials;
 using Windows.Security.Cryptography;
+using Windows.Foundation;
 
 namespace VaultType.Security;
 
@@ -13,12 +14,17 @@ namespace VaultType.Security;
 internal static class WindowsHelloKey
 {
     private static readonly CngProvider TpmProvider = new("Microsoft Platform Crypto Provider");
+    private static readonly HelloPromptCoordinator Prompts = new(TimeSpan.FromMinutes(2));
     private static string Name(string accountId, string keyId) => $"VaultType.Hello.{accountId}.{keyId}";
 
-    internal static async Task<HelloEnvelope> EnrollAsync(string accountId, string server, string email,
+    internal static Task<HelloEnvelope> EnrollAsync(string accountId, string server, string email,
         Func<byte[]> exportUserKey, bool persist)
+        => Prompts.RunAsync(ct => EnrollCoreAsync(accountId, server, email, exportUserKey, persist, ct));
+
+    private static async Task<HelloEnvelope> EnrollCoreAsync(string accountId, string server, string email,
+        Func<byte[]> exportUserKey, bool persist, CancellationToken ct)
     {
-        if (!await KeyCredentialManager.IsSupportedAsync())
+        if (!await KeyCredentialManager.IsSupportedAsync().AsTask(ct))
             throw new InvalidOperationException(Loc.T("hello.unavailable"));
 
         var envelope = new HelloEnvelope
@@ -53,10 +59,11 @@ internal static class WindowsHelloKey
                 }
             }
 
-            var result = await KeyCredentialManager.RequestCreateAsync(Name(accountId, envelope.KeyId),
-                KeyCredentialCreationOption.FailIfExists);
-            CheckStatus(result.Status);
-            wrappingKey = await DeriveKeyAsync(result.Credential, envelope.Challenge);
+            var result = await PromptAsync(() => KeyCredentialManager.RequestCreateAsync(Name(accountId, envelope.KeyId),
+                KeyCredentialCreationOption.FailIfExists), ct, "HELLO_CREATE");
+            CheckStatus(result.Status, "HELLO_CREATE");
+            wrappingKey = await DeriveKeyAsync(result.Credential, envelope.Challenge, ct);
+            ct.ThrowIfCancellationRequested();
             // Export only after the interactive prompt: a plaintext vault key must not sit in a
             // managed array while Windows waits for the user. The callback also rechecks lock state.
             userKey = exportUserKey();
@@ -86,13 +93,18 @@ internal static class WindowsHelloKey
         }
     }
 
-    internal static async Task<byte[]> UnwrapAsync(string accountId, string server, string email, HelloEnvelope envelope)
+    internal static Task<byte[]> UnwrapAsync(string accountId, string server, string email, HelloEnvelope envelope,
+        CancellationToken cancellationToken = default)
+        => Prompts.RunAsync(ct => UnwrapCoreAsync(accountId, server, email, envelope, ct), cancellationToken);
+
+    private static async Task<byte[]> UnwrapCoreAsync(string accountId, string server, string email,
+        HelloEnvelope envelope, CancellationToken ct)
     {
         if (!envelope.IsValid) throw new CryptographicException(Loc.T("hello.failed"));
         // Open only. Recreating a missing credential on unlock cannot recover its envelope.
-        var result = await KeyCredentialManager.OpenAsync(Name(accountId, envelope.KeyId));
-        CheckStatus(result.Status);
-        byte[] key = await DeriveKeyAsync(result.Credential, envelope.Challenge);
+        var result = await KeyCredentialManager.OpenAsync(Name(accountId, envelope.KeyId)).AsTask(ct);
+        CheckStatus(result.Status, "HELLO_OPEN");
+        byte[] key = await DeriveKeyAsync(result.Credential, envelope.Challenge, ct);
         byte[]? plaintext = null;
         try
         {
@@ -115,10 +127,11 @@ internal static class WindowsHelloKey
         }
     }
 
-    private static async Task<byte[]> DeriveKeyAsync(KeyCredential credential, byte[] challenge)
+    private static async Task<byte[]> DeriveKeyAsync(KeyCredential credential, byte[] challenge, CancellationToken ct)
     {
-        var result = await credential.RequestSignAsync(CryptographicBuffer.CreateFromByteArray(challenge));
-        CheckStatus(result.Status);
+        var result = await PromptAsync(() => credential.RequestSignAsync(CryptographicBuffer.CreateFromByteArray(challenge)),
+            ct, "HELLO_SIGN");
+        CheckStatus(result.Status, "HELLO_SIGN");
         CryptographicBuffer.CopyToByteArray(result.Result, out byte[] signature);
         try
         {
@@ -130,10 +143,45 @@ internal static class WindowsHelloKey
         finally { CryptographicOperations.ZeroMemory(signature); }
     }
 
-    private static void CheckStatus(KeyCredentialStatus status)
+    // The desktop credential API has no owner-HWND overload. Give its visible security dialog
+    // foreground once, only while our own app still owns the foreground. Never pull focus back
+    // from an unrelated app the user has deliberately switched to. No polling after completion.
+    private static async Task<T> PromptAsync<T>(Func<IAsyncOperation<T>> start, CancellationToken ct, string stage)
+    {
+        int focused = 0;
+        await using var timer = new System.Threading.Timer(_ =>
+        {
+            if (ct.IsCancellationRequested || Volatile.Read(ref focused) != 0) return;
+            try
+            {
+                IntPtr dialog = Native.FindWindow("Credential Dialog Xaml Host", null);
+                if (dialog == IntPtr.Zero || !Native.IsWindowVisible(dialog)) return;
+                IntPtr foreground = Native.GetForegroundWindow();
+                if (foreground == dialog) { Interlocked.Exchange(ref focused, 1); return; }
+                Native.GetWindowThreadProcessId(foreground, out uint owner);
+                if (owner == (uint)Environment.ProcessId && Native.SetForegroundWindow(dialog))
+                    Interlocked.Exchange(ref focused, 1);
+            }
+            catch { /* foreground assistance is best effort, never an authentication result */ }
+        }, null, TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(250));
+        try { return await start().AsTask(ct).ConfigureAwait(false); }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) when (ex.HResult is unchecked((int)0x80090036) // NTE_USER_CANCELLED
+            or unchecked((int)0x800704C7) or unchecked((int)0x80004004))
+        {
+            throw new OperationCanceledException("Windows Hello was canceled.", ex, ct);
+        }
+        catch (Exception ex)
+        {
+            throw new CryptographicException($"{Loc.T("hello.failed")} ({stage}: 0x{ex.HResult:X8})", ex);
+        }
+    }
+
+    private static void CheckStatus(KeyCredentialStatus status, string stage)
     {
         if (status == KeyCredentialStatus.UserCanceled) throw new OperationCanceledException();
-        if (status != KeyCredentialStatus.Success) throw new CryptographicException(Loc.T("hello.failed"));
+        if (status != KeyCredentialStatus.Success)
+            throw new CryptographicException($"{Loc.T("hello.failed")} ({stage}: {status})");
     }
 
     private static void RequireHardware(CngKey key)
@@ -153,7 +201,12 @@ internal static class WindowsHelloKey
     internal static async Task DeleteAsync(string accountId, HelloEnvelope envelope)
     {
         if (!Guid.TryParseExact(envelope.KeyId, "N", out _)) return;
-        try { await KeyCredentialManager.DeleteAsync(Name(accountId, envelope.KeyId)); } catch { }
+        try
+        {
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await KeyCredentialManager.DeleteAsync(Name(accountId, envelope.KeyId)).AsTask(deadline.Token);
+        }
+        catch { }
         if (envelope.TpmProtected)
         {
             try

@@ -85,11 +85,21 @@ The settings window's hard-coded `Topmost=True` has been removed on the follow-u
 Release cross-build passed with zero warnings/errors. The published beta still contains the old
 window behavior until a follow-up build is released.
 
-The repeated-prompt report still needs its trigger and count: first enrollment, ordinary vault
-unlock, or a website passkey request. Enrollment currently calls both `RequestCreateAsync` and
-`RequestSignAsync`, which can each prompt. An ordinary vault unlock calls `RequestSignAsync` once.
-Passkey use can additionally invoke the original plugin user-verification prompt. Do not describe
-an indefinite loop as fixed or remove a verification gate without identifying the reported path.
+The user clarified that the prompt repeats indefinitely after saving the account, and canceling
+returns a Hello failure. This is not the finite two-prompt first enrollment sequence. A candidate
+fix is being prepared in [PR #2](https://github.com/uJZk/VaultType/pull/2): one interactive vault
+Hello operation at a time without queuing, a two-minute cancellation deadline forwarded to WinRT,
+best-effort foreground activation of the native credential dialog only while VaultType owns the
+foreground, and temporarily lowering the unlock window out of the topmost band. Native failures
+identify `HELLO_CREATE`, `HELLO_OPEN` or `HELLO_SIGN`; native cancellation HRESULTs are treated as
+cancellation instead of generic failure. No verification gate has been bypassed.
+
+The follow-up cross-build passed with zero warnings/errors. All 34 tests passed, including five
+new coordinator tests for concurrency, exception recovery, pre-cancellation, user cancellation and
+deadline cancellation. These tests do not reproduce the actual Windows UI loop. Its root cause
+and whether the candidate changes resolve it still require device feedback on the follow-up beta.
+Enrollment still calls both creation and signing, which may each prompt once. Ordinary vault
+unlock signs once; website passkey use may additionally invoke the original plugin verification.
 
 The upstream source was checked directly: its settings XAML also specifies `Topmost=True`, its
 account `bio` method falls back to the master password, and its functional Hello verification is

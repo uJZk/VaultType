@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../src/VaultType/Security/HelloEnvelope.cs" Link="HelloEnvelope.cs" />
+    <Compile Include="../../src/VaultType/Security/HelloPromptCoordinator.cs" Link="HelloPromptCoordinator.cs" />
   </ItemGroup>
 </Project>

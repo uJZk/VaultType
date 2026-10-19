@@ -592,7 +592,8 @@ public partial class App : Application
         s.Cfg.UnlockMethod = "password";
         s.Cfg.HelloPersistAcrossRestart = false;
         ShowBalloon(Loc.T("msg.error"), ex is OperationCanceledException
-            ? Loc.T("hello.enrollCanceled") : Loc.T("hello.enrollFailed", ex.Message));
+            ? Loc.T("hello.enrollCanceled") : Loc.T("hello.enrollFailed",
+                ex is TimeoutException ? Loc.T("hello.timeout") : ex.Message));
     }
 
     // Synchronous unlock for the agent paths - SSH sign requests and passkey ceremonies - (already
