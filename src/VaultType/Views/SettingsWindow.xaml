@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:VaultType"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
-        ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True" Title="VaultType"
+        ResizeMode="NoResize" ShowInTaskbar="False" Title="VaultType"
         SizeToContent="WidthAndHeight" WindowStartupLocation="CenterScreen"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
         FontFamily="{StaticResource AppFont}">

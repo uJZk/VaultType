@@ -77,3 +77,21 @@ Next: confirm installation, then complete [the Windows acceptance checklist](win
 especially native prompt/focus behavior, TPM private-key export rejection, app/OS restart persistence,
 unavailable/reset TPM behavior, cancellation, password fallback and SSH/passkey reprompts. Keep the
 release in beta until those device results are recorded. Consider an upstream PR afterward.
+
+## Beta feedback follow-up
+
+The user reported an always-on-top settings window and repeated Hello prompts after verification.
+The settings window's hard-coded `Topmost=True` has been removed on the follow-up branch; the
+Release cross-build passed with zero warnings/errors. The published beta still contains the old
+window behavior until a follow-up build is released.
+
+The repeated-prompt report still needs its trigger and count: first enrollment, ordinary vault
+unlock, or a website passkey request. Enrollment currently calls both `RequestCreateAsync` and
+`RequestSignAsync`, which can each prompt. An ordinary vault unlock calls `RequestSignAsync` once.
+Passkey use can additionally invoke the original plugin user-verification prompt. Do not describe
+an indefinite loop as fixed or remove a verification gate without identifying the reported path.
+
+The upstream source was checked directly: its settings XAML also specifies `Topmost=True`, its
+account `bio` method falls back to the master password, and its functional Hello verification is
+in `Security/Passkey/Ceremony.cs` for website passkey operations. The observed Store edition's
+window behavior has not been independently reproduced.
