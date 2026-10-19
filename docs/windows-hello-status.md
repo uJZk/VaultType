@@ -82,12 +82,13 @@ release in beta until those device results are recorded. Consider an upstream PR
 
 The user reported an always-on-top settings window and repeated Hello prompts after verification.
 The settings window's hard-coded `Topmost=True` has been removed on the follow-up branch; the
-Release cross-build passed with zero warnings/errors. The published beta still contains the old
-window behavior until a follow-up build is released.
+Release cross-build passed with zero warnings/errors. Beta 1 retains the old window behavior;
+[Beta 2](https://github.com/uJZk/VaultType/releases/tag/v1.2.4-beta.2) distributes the follow-up
+candidate from `66e26f3598987561b5654b62cccffe8ec976e62c` (MSIX version `1.2.4.2`).
 
 The user clarified that the prompt repeats indefinitely after saving the account, and canceling
-returns a Hello failure. This is not the finite two-prompt first enrollment sequence. A candidate
-fix is being prepared in [PR #2](https://github.com/uJZk/VaultType/pull/2): one interactive vault
+returns a Hello failure. This is not the finite two-prompt first enrollment sequence. The candidate
+fix in [PR #2](https://github.com/uJZk/VaultType/pull/2) allows one interactive vault
 Hello operation at a time without queuing, a two-minute cancellation deadline forwarded to WinRT,
 best-effort foreground activation of the native credential dialog only while VaultType owns the
 foreground, and temporarily lowering the unlock window out of the topmost band. Native failures
@@ -105,3 +106,10 @@ The upstream source was checked directly: its settings XAML also specifies `Topm
 account `bio` method falls back to the master password, and its functional Hello verification is
 in `Security/Passkey/Ceremony.cs` for website passkey operations. The observed Store edition's
 window behavior has not been independently reproduced.
+
+There is also a [documented desktop credential-dialog focus issue](https://github.com/microsoft/cppwinrt/issues/999)
+with this WinRT API, which lacks an owner-HWND overload. That supports testing foreground handling,
+but is not proof that this user's infinite verification loop has the same cause. Beta 2 has a new
+ephemeral signing certificate; import its own `.cer` before installing its MSIX, even if Beta 1's
+certificate was already trusted. Keep PR #2 open for device feedback rather than merging it as a
+verified fix for the loop.
