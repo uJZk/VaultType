@@ -5,6 +5,9 @@
 #ifndef MyAppVersion
   #define MyAppVersion "0.0.0"
 #endif
+#ifndef MyFileVersion
+  #define MyFileVersion MyAppVersion
+#endif
 #define MyAppName "VaultType"
 #define MyAppPublisher "Christian Zaenker"
 #define MyAppURL "https://github.com/friedPotat0/VaultType"
@@ -14,6 +17,8 @@
 AppId={{5E9C3B71-2F4A-4D8E-9A6B-7C1D0E2F3A4B}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+; Windows file versions are numeric even when the display version includes a beta suffix.
+VersionInfoVersion={#MyFileVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
