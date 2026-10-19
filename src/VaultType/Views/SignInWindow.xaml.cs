@@ -30,6 +30,7 @@ public partial class SignInWindow : Window
     public string PreferredUnlock { get; private set; } = "password";   // password | pin | bio | passkey
     public SecureString? PinToSet { get; private set; }
     public bool RequireMasterOnRestart { get; private set; } = true;
+    public bool HelloPersistAcrossRestart { get; private set; }
     public string VaultName => VaultNameBox.Text.Trim();
     public string ColorHex => AccountConfig.Palette[_palIndex % AccountConfig.Palette.Length];
 
@@ -61,6 +62,7 @@ public partial class SignInWindow : Window
     private int _twofaIndex;
     private int _palIndex;
     private bool _restartLock = true;
+    private bool _helloPersist;
     private string? _dropdown;   // "server" | "twofa" | null
 
     private bool IsSelfHosted => _serverIndex >= 2;
@@ -96,12 +98,13 @@ public partial class SignInWindow : Window
     }
 
     // Prefill the vault display + unlock preference (editing an existing account).
-    public void PresetVault(string name, string colorHex, string prefUnlock, bool restartLock)
+    public void PresetVault(string name, string colorHex, string prefUnlock, bool restartLock, bool helloPersist = false)
     {
         VaultNameBox.Text = name;
         _palIndex = Math.Max(0, Array.IndexOf(AccountConfig.Palette, colorHex));
         _prefUnlock = prefUnlock;
         _restartLock = restartLock;
+        _helloPersist = helloPersist;
         Refresh();
     }
 
@@ -152,6 +155,7 @@ public partial class SignInWindow : Window
         PasskeyHint.Visibility = _method == "passkey" ? Visibility.Visible : Visibility.Collapsed;
         MasterGroup.Visibility = _method is "email" or "apikey" or "sso" ? Visibility.Visible : Visibility.Collapsed;
         PinGroup.Visibility = _prefUnlock == "pin" ? Visibility.Visible : Visibility.Collapsed;
+        HelloGroup.Visibility = _prefUnlock == "bio" ? Visibility.Visible : Visibility.Collapsed;
 
         TwofaLabel.Text = TwofaOptions[_twofaIndex].Label;
         OkLabel.Text = Loc.T(_method switch
@@ -164,6 +168,7 @@ public partial class SignInWindow : Window
         RestartLockBox.Background = _restartLock ? (Brush)FindResource("Accent") : Brushes.Transparent;
         RestartLockBox.BorderBrush = _restartLock ? (Brush)FindResource("Accent") : (Brush)FindResource("BorderStrong");
         RestartLockCheck.Visibility = _restartLock ? Visibility.Visible : Visibility.Collapsed;
+        HelloPersistTgl.IsChecked = _helloPersist;
 
         UpdateAvatar();
         UpdatePlaceholders();
@@ -216,6 +221,7 @@ public partial class SignInWindow : Window
     private void VaultName_Changed(object sender, TextChangedEventArgs e) { UpdateAvatar(); UpdatePlaceholders(); }
     private void Avatar_Click(object sender, RoutedEventArgs e) { _palIndex = (_palIndex + 1) % AccountConfig.Palette.Length; UpdateAvatar(); }
     private void RestartLock_Click(object sender, MouseButtonEventArgs e) { _restartLock = !_restartLock; Refresh(); }
+    private void HelloPersist_Click(object sender, RoutedEventArgs e) => _helloPersist = HelloPersistTgl.IsChecked == true;
 
     // ---- dropdowns (overlay panels, like the design) ----
 
@@ -328,6 +334,7 @@ public partial class SignInWindow : Window
         PreferredUnlock = _prefUnlock;
         PinToSet = _prefUnlock == "pin" ? PinBox.SecurePassword : null;
         RequireMasterOnRestart = _restartLock;
+        HelloPersistAcrossRestart = _prefUnlock == "bio" && _helloPersist;
         DialogResult = true;
     }
 

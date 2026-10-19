@@ -94,6 +94,8 @@
                         <TextBlock x:Name="OkLabel" Text="{local:Tr unlock.btnUnlock}" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
+                <Button x:Name="MasterPasswordBtn" Style="{StaticResource GhostButton}" Margin="0,10,0,0"
+                        Content="{local:Tr hello.useMaster}" Visibility="Collapsed" Click="MasterPassword_Click" />
             </StackPanel>
 
             <!-- close button: card top-right corner, red on hover -->

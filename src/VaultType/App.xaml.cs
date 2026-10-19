@@ -375,7 +375,8 @@ public partial class App : Application
             // An existing account carries its display + unlock preferences into the dialog, so
             // "edit" from the settings shows the current values instead of blank defaults.
             if (!isNew)
-                win.PresetVault(s.Cfg.Name, s.Cfg.ColorHex, s.Cfg.UnlockMethod, s.Cfg.PinRequireMasterOnRestart);
+                win.PresetVault(s.Cfg.Name, s.Cfg.ColorHex, s.Cfg.UnlockMethod, s.Cfg.PinRequireMasterOnRestart,
+                    s.Cfg.HelloPersistAcrossRestart);
             if (pendingError != null)
             {
                 string errCopy = pendingError;
@@ -413,6 +414,7 @@ public partial class App : Application
             string prefUnlock = win.PreferredUnlock;
             byte[]? pinBytes = prefUnlock == "pin" && win.PinToSet != null ? SecureStringUtil.ToUtf8Bytes(win.PinToSet) : null;
             bool restartLock = win.RequireMasterOnRestart;
+            bool helloPersist = win.HelloPersistAcrossRestart;
             string vaultName = win.VaultName;
             string colorHex = win.ColorHex;
             win.Password.Dispose();
@@ -450,6 +452,7 @@ public partial class App : Application
             // preferred unlock method + display, straight from the dialog
             s.Cfg.UnlockMethod = prefUnlock;
             s.Cfg.PinRequireMasterOnRestart = restartLock;
+            s.Cfg.HelloPersistAcrossRestart = helloPersist;
             if (vaultName.Length > 0) s.Cfg.Name = vaultName;
             s.Cfg.ColorHex = colorHex;
             if (pinBytes != null)
@@ -457,6 +460,7 @@ public partial class App : Application
                 try { PinUnlock.Enroll(s, pinBytes); }
                 catch (Exception ex) { ShowBalloon(Loc.T("msg.error"), ex.Message); }
             }
+            if (prefUnlock == "bio") await EnrollHello(s);
 
             if (isNew)
             {
@@ -468,7 +472,7 @@ public partial class App : Application
 
             _idle.Arm(_cfg.IdleTimeoutMinutes);
             UpdateTray();
-            return true;
+            return s.Unlocked;
         }
     }
 
@@ -482,9 +486,11 @@ public partial class App : Application
         {
             string method = s.Cfg.UnlockMethod;
             if (method == "pin" && !PinUnlock.Available(s)) method = "password";
-            if (method is "bio" or "passkey") method = "password";   // not implemented yet - honest fallback
+            if (method == "bio" && !s.Backend.HelloAvailable) method = "password";
+            if (method == "passkey") method = "password";
 
             var win = new UnlockWindow(Loc.T("unlock.title"), "", _cfg.ExcludeFromScreenCapture, method);
+            win.HelloUnlock = () => Task.Run(() => s.Backend.UnlockWithHelloAsync());
             var choices = _sessions.Select(x => new AccountChoice
             {
                 Id = x.Cfg.Id, Name = x.Cfg.Name, Email = x.Cfg.AccountEmail,
@@ -509,8 +515,10 @@ public partial class App : Application
                 continue;
             }
             if (ok != true) return false;
+            method = win.Method; // the Hello dialog always offers a master-password fallback
+            if (win.HelloResult == UnlockStatus.NeedsLogin) return await RunSignInFlow(s, isNew: false);
 
-            byte[] pw;
+            byte[] pw = Array.Empty<byte>();
             bool viaPin = method == "pin";
             if (viaPin)
             {
@@ -518,25 +526,28 @@ public partial class App : Application
                 pw = SecureStringUtil.ToUtf8Bytes(win.Pin);
                 win.Pin.Dispose();
             }
-            else
+            else if (method != "bio")
             {
                 if (win.Password == null) return false;
                 pw = SecureStringUtil.ToUtf8Bytes(win.Password);
                 win.Password.Dispose();
             }
 
-            var loading = new LoadingWindow(_cfg.ExcludeFromScreenCapture);
-            loading.SetStatus(Loc.T("loading.unlocking"));
-            loading.Show();
-
-            UnlockStatus? unlockRes = null;
+            UnlockStatus? unlockRes = win.HelloResult;
             string failMsg = "";
-            try
+            if (unlockRes == null)
             {
-                unlockRes = await Task.Run(() => viaPin ? PinUnlock.Unlock(s, pw) : s.Backend.UnlockAsync(pw));
+                var loading = new LoadingWindow(_cfg.ExcludeFromScreenCapture);
+                loading.SetStatus(Loc.T("loading.unlocking"));
+                loading.Show();
+
+                try
+                {
+                    unlockRes = await Task.Run(() => viaPin ? PinUnlock.Unlock(s, pw) : s.Backend.UnlockAsync(pw));
+                }
+                catch (Exception ex) { failMsg = ex.Message; }
+                loading.Close();
             }
-            catch (Exception ex) { failMsg = ex.Message; }
-            loading.Close();
 
             if (unlockRes == UnlockStatus.NeedsLogin) return await RunSignInFlow(s, isNew: false);
             if (unlockRes == UnlockStatus.ServerUnreachable)
@@ -555,12 +566,33 @@ public partial class App : Application
                 continue;
             }
 
+            if (method == "password" && s.Cfg.UnlockMethod == "bio"
+                && (!s.Backend.HelloAvailable || win.HelloFailed)) await EnrollHello(s);
             s.Cfg.LastUnlockedUtc = DateTimeOffset.UtcNow;
             _cfg.Save();
             _idle.Arm(_cfg.IdleTimeoutMinutes);
             UpdateTray();
-            return true;
+            return s.Unlocked;
         }
+    }
+
+    private async Task EnrollHello(VaultSession s)
+    {
+        try { await Task.Run(s.Backend.EnrollHelloAsync); }
+        catch (Exception ex)
+        {
+            try { await Task.Run(s.Backend.RemoveHelloAsync); } catch { }
+            HelloEnrollmentFailed(s, ex);
+        }
+    }
+
+    private void HelloEnrollmentFailed(VaultSession s, Exception ex)
+    {
+        // A canceled or failed enrollment must not leave a selected but unusable method.
+        s.Cfg.UnlockMethod = "password";
+        s.Cfg.HelloPersistAcrossRestart = false;
+        ShowBalloon(Loc.T("msg.error"), ex is OperationCanceledException
+            ? Loc.T("hello.enrollCanceled") : Loc.T("hello.enrollFailed", ex.Message));
     }
 
     // Synchronous unlock for the agent paths - SSH sign requests and passkey ceremonies - (already
@@ -574,10 +606,12 @@ public partial class App : Application
         viaMasterPassword = false;
         string method = s.Cfg.UnlockMethod;
         if (method == "pin" && !PinUnlock.Available(s)) method = "password";
-        if (method is "bio" or "passkey") method = "password";
+        if (method == "bio" && !s.Backend.HelloAvailable) method = "password";
+        if (method == "passkey") method = "password";
 
         var win = new UnlockWindow(Loc.T("unlock.title"),
             Loc.T(subtitleKey), _cfg.ExcludeFromScreenCapture, method);
+        win.HelloUnlock = () => Task.Run(() => s.Backend.UnlockWithHelloAsync());
         // Only the owning vault: which one is needed follows from the key or credential being used,
         // so there is nothing to switch to here. Offering the switcher would let the dialog show one
         // vault while still unlocking the other.
@@ -590,22 +624,37 @@ public partial class App : Application
             },
         }, 0);
         if (win.ShowDialog() != true) return false;
+        method = win.Method;
 
         bool viaPin = method == "pin";
-        var secure = viaPin ? win.Pin : win.Password;
-        if (secure == null) return false;
-        byte[] pw = SecureStringUtil.ToUtf8Bytes(secure);
-        secure.Dispose();
-
         UnlockStatus st;
-        try { st = Task.Run(() => viaPin ? PinUnlock.Unlock(s, pw) : s.Backend.UnlockAsync(pw)).GetAwaiter().GetResult(); }
-        catch { st = UnlockStatus.Failed; }
+        if (win.HelloResult is UnlockStatus helloStatus) st = helloStatus;
+        else
+        {
+            var secure = viaPin ? win.Pin : win.Password;
+            if (secure == null) return false;
+            byte[] pw = SecureStringUtil.ToUtf8Bytes(secure);
+            secure.Dispose();
+
+            try { st = Task.Run(() => viaPin ? PinUnlock.Unlock(s, pw) : s.Backend.UnlockAsync(pw)).GetAwaiter().GetResult(); }
+            catch { st = UnlockStatus.Failed; }
+        }
 
         if (st == UnlockStatus.Success)
         {
-            viaMasterPassword = !viaPin;
+            viaMasterPassword = method == "password";
+            if (viaMasterPassword && s.Cfg.UnlockMethod == "bio"
+                && (!s.Backend.HelloAvailable || win.HelloFailed))
+            {
+                try { Task.Run(s.Backend.EnrollHelloAsync).GetAwaiter().GetResult(); }
+                catch (Exception ex)
+                {
+                    try { Task.Run(s.Backend.RemoveHelloAsync).GetAwaiter().GetResult(); } catch { }
+                    HelloEnrollmentFailed(s, ex);
+                }
+            }
             s.Cfg.LastUnlockedUtc = DateTimeOffset.UtcNow;
-            _cfg.Save(); _idle.Arm(_cfg.IdleTimeoutMinutes); UpdateTray(); return true;
+            _cfg.Save(); _idle.Arm(_cfg.IdleTimeoutMinutes); UpdateTray(); return s.Unlocked;
         }
         return false;
     }
@@ -1691,6 +1740,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        foreach (var s in _sessions) s.Backend.Dispose();
         try { _mutex?.ReleaseMutex(); _mutex?.Dispose(); } catch { }
         base.OnExit(e);
     }
