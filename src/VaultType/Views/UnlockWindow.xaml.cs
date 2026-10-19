@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using VaultType.Security;
+using VaultType.Vault;
 using Button = System.Windows.Controls.Button;
 using ColorConverter = System.Windows.Media.ColorConverter;
 
@@ -28,7 +29,12 @@ public partial class UnlockWindow : Window
     public SecureString? Pin { get; private set; }        // PIN (method = pin)
 
     private readonly bool _excludeCapture;
-    private readonly string _method;
+    private string _method;
+    private bool _helloBusy;
+    public string Method => _method;
+    public Func<Task<UnlockStatus>>? HelloUnlock { get; set; }
+    public UnlockStatus? HelloResult { get; private set; }
+    public bool HelloFailed { get; private set; }
     private List<AccountChoice> _accounts = new();
     private int _selIndex;
 
@@ -56,6 +62,7 @@ public partial class UnlockWindow : Window
 
         PasswordGroup.Visibility = method == "password" ? Visibility.Visible : Visibility.Collapsed;
         PinGroup.Visibility = method == "pin" ? Visibility.Visible : Visibility.Collapsed;
+        MasterPasswordBtn.Visibility = method == "bio" ? Visibility.Visible : Visibility.Collapsed;
         OkLabel.Text = Loc.T(method switch
         {
             "bio" => "unlock.btnBio",
@@ -70,6 +77,7 @@ public partial class UnlockWindow : Window
 
         MouseLeftButtonDown += (_, e) => { if (e.ButtonState == MouseButtonState.Pressed) { try { DragMove(); } catch { } } };
         Loaded += OnLoaded;
+        Closing += (_, e) => { if (_helloBusy) e.Cancel = true; };
     }
 
     private void OnLoaded(object? sender, RoutedEventArgs e)
@@ -114,6 +122,7 @@ public partial class UnlockWindow : Window
     private void FocusInput()
     {
         if (_method == "pin") { PinBox.Focus(); Keyboard.Focus(PinBox); }
+        else if (_method == "bio") { OkBtn.Focus(); Keyboard.Focus(OkBtn); }
         else { Pw.Focus(); Keyboard.Focus(Pw); }
     }
 
@@ -123,11 +132,36 @@ public partial class UnlockWindow : Window
         Error.Visibility = Visibility.Visible;
         Pw.Clear();
         PinBox.Clear();
-        if (_method == "pin") PinBox.Focus(); else Pw.Focus();
+        FocusInput();
     }
 
-    private void Ok_Click(object sender, RoutedEventArgs e)
+    private async void Ok_Click(object sender, RoutedEventArgs e)
     {
+        if (_helloBusy) return;
+        if (_method == "bio")
+        {
+            if (HelloUnlock == null) { UseMasterPassword(); ShowError(Loc.T("hello.failed")); return; }
+            Error.Visibility = Visibility.Collapsed;
+            _helloBusy = true;
+            IsEnabled = false;
+            UnlockStatus status;
+            try { status = await HelloUnlock(); }
+            catch { status = UnlockStatus.HelloUnavailable; }
+            finally { _helloBusy = false; IsEnabled = true; }
+            if (status is UnlockStatus.Success or UnlockStatus.NeedsLogin)
+            {
+                HelloResult = status;
+                DialogResult = true;
+            }
+            else if (status == UnlockStatus.ServerUnreachable) ShowError(Loc.T("unlock.errUnreachable"));
+            else if (status != UnlockStatus.Canceled)
+            {
+                HelloFailed = true;
+                UseMasterPassword();
+                ShowError(Loc.T("hello.failed"));
+            }
+            return;
+        }
         if (_method == "password" && Pw.SecurePassword.Length == 0) { ShowError(Loc.T("unlock.errMaster")); return; }
         if (_method == "pin" && PinBox.SecurePassword.Length == 0) { ShowError(Loc.T("unlock.errPin")); return; }
         // Only hand back the field for the active method; leaving the other null avoids an unused,
@@ -135,6 +169,19 @@ public partial class UnlockWindow : Window
         if (_method == "pin") Pin = PinBox.SecurePassword;
         else Password = Pw.SecurePassword;
         DialogResult = true;
+    }
+
+    private void MasterPassword_Click(object sender, RoutedEventArgs e) => UseMasterPassword();
+
+    private void UseMasterPassword()
+    {
+        _method = "password";
+        PasswordGroup.Visibility = Visibility.Visible;
+        PinGroup.Visibility = Visibility.Collapsed;
+        MasterPasswordBtn.Visibility = Visibility.Collapsed;
+        OkLabel.Text = Loc.T("unlock.btnUnlock");
+        Subtitle.Text = Loc.T("unlock.hintPassword");
+        FocusInput();
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;

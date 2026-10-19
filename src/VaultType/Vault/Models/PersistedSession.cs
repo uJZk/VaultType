@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using VaultType.Security;
 
 namespace VaultType.Vault.Models;
 
@@ -39,6 +40,9 @@ public sealed class PersistedSession
     // Consecutive failed PIN unlock attempts. Persisted so a restart can't reset the counter; when
     // it reaches the limit the PIN envelope is dropped and the master password is required again.
     public int PinFailedAttempts { get; set; }
+
+    // Only the TPM-backed Hello envelope is persisted. The default Hello envelope stays in RAM.
+    public HelloEnvelope? Hello { get; set; }
 
     [JsonIgnore]
     public string? RefreshToken

@@ -1,6 +1,6 @@
 # VaultType privacy policy
 
-*Last updated: 2026-07-28*
+*Last updated: 2026-10-19*
 
 VaultType is a Windows client for Bitwarden and Vaultwarden vaults. This policy describes what
 data the application handles and where it goes. The short version: **VaultType collects nothing.**
@@ -18,15 +18,24 @@ access rights are restricted to your Windows user account:
 - **Settings** (`config.json`) - hotkey, language, behaviour toggles and the list of configured
   accounts (display name, server URL, email address). No secrets are stored here.
 - **Per-account session data** - the cryptographic key envelopes needed to unlock your vault
-  (protected by your master password or PIN) and a refresh token sealed with Windows DPAPI.
+  (protected by your master password, PIN or Windows Hello) and a refresh token sealed with Windows DPAPI.
   Your decrypted vault contents are **never written to disk**; they are re-fetched from your
   vault server on every unlock and held only in protected memory.
+- **Windows Hello credentials** - if enabled, Windows holds a per-enrollment signing credential.
+  With optional restart persistence, Windows also holds a non-exportable TPM wrapping key, and
+  VaultType stores only the encrypted Hello envelope in the account's session data. Persistence is
+  off by default. Fingerprints, face data and your Windows Hello PIN stay with Windows; VaultType
+  receives a cryptographic signature, never your biometric data or Hello PIN. Signatures and
+  derived wrapping keys are used temporarily and wiped, not stored.
 - **Favicon cache** - icons downloaded from your own vault server, if the icon feature is
   enabled.
 - **Public metadata caches** - non-secret SSH public keys and passkey metadata, so those
   features can list entries while the vault is locked.
 
-VaultType writes no log files. Uninstalling VaultType and deleting this folder removes all of it.
+VaultType writes no log files. Uninstalling VaultType and deleting this folder removes its local
+application data. Remove accounts within VaultType first to remove their Hello envelopes and
+attempt deletion of the Windows-managed Hello/TPM keys. OS keys left after interrupted cleanup are
+not removed by deleting the application folder alone.
 
 ## What network connections the application makes
 

@@ -40,6 +40,10 @@ public sealed class AccountConfig
     // with PIN unlock: require the master password once after a restart (RAM-only envelope)
     public bool PinRequireMasterOnRestart { get; set; } = true;
 
+    // Opt-in: keep the Hello envelope across restarts, additionally wrapped by a non-exportable
+    // TPM key. Without this, Hello needs one master-password unlock after each app restart.
+    public bool HelloPersistAcrossRestart { get; set; }
+
     // when this account last completed a successful sync (login, unlock and manual sync all
     // sync); feeds the tray menu's "last synced" hint across restarts
     public DateTimeOffset? LastSyncUtc { get; set; }

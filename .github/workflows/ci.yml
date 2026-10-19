@@ -16,3 +16,5 @@ jobs:
           dotnet-version: '10.0.x'
 
       - run: dotnet build src/VaultType/VaultType.csproj -c Release
+
+      - run: dotnet run --project tests/VaultType.Hello.Tests -c Release

@@ -9,6 +9,7 @@ as required by their respective licenses.
 | [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) (embedded font) | Copyright 2020 The JetBrains Mono Project Authors | SIL Open Font License 1.1 |
 | [Lucide](https://github.com/lucide-icons/lucide) (icon geometries) | Copyright (c) 2022 Lucide Contributors; portions Copyright (c) 2013-2022 Cole Bemis (Feather) | ISC (portions MIT) |
 | [System.Formats.Cbor](https://www.nuget.org/packages/System.Formats.Cbor) (NuGet package) | Copyright (c) .NET Foundation and Contributors | MIT |
+| [Windows SDK .NET projections](https://github.com/microsoft/CsWinRT) (Windows Hello API bindings and WinRT.Runtime) | Copyright (c) Microsoft Corporation | MIT |
 | [.NET Runtime](https://github.com/dotnet/runtime) (bundled in self-contained builds) | Copyright (c) .NET Foundation and Contributors | MIT |
 
 ---
@@ -141,6 +142,8 @@ embedded as vector paths in the application's UI.
 
 Applies to **System.Formats.Cbor** and to the **.NET Runtime** (both Copyright (c) .NET
 Foundation and Contributors; the runtime is bundled only in the self-contained release builds).
+Also applies to the **Windows SDK .NET projections and WinRT.Runtime** (Copyright (c) Microsoft
+Corporation).
 
     The MIT License (MIT)
 

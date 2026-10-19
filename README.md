@@ -90,6 +90,8 @@ secrets.
   Windows Hello.
 - **PIN unlock** - unlock with a short PIN instead of the full master password, Bitwarden-style
   (wrong-PIN limit, optional "require master password after restart").
+- **Windows Hello unlock** - use your fingerprint, face or Windows Hello PIN. Optional TPM-backed
+  persistence keeps Hello available after restarting VaultType or Windows; it is off by default.
 - **Local TOTP** generation (RFC 6238, plus Steam Guard) - no clipboard, no extra network calls.
 - **Real favicons** served by *your own* server (`/icons`), cached locally - no third-party icon
   service is contacted.
@@ -164,7 +166,7 @@ password or vault data.
   the milliseconds needed to type or sign, inside a locked buffer that is then zeroed. Locking
   wipes the key, rendering any leftover ciphertext useless.
 - **Nothing decrypted touches the disk.** Per account, only the key envelopes needed to unlock
-  (master-key-wrapped user key, DPAPI-sealed refresh token, optional PIN envelope) plus non-secret
+  (master-key-wrapped user key, DPAPI-sealed refresh token, optional PIN/Hello envelopes) plus non-secret
   metadata are stored under `%LOCALAPPDATA%\VaultType` - a folder whose ACL is restricted to your
   user. Vault items themselves are re-fetched from the server on every unlock.
 - Windows are hidden from screen capture (`WDA_EXCLUDEFROMCAPTURE`), legacy DLL/hook injection is
@@ -182,6 +184,11 @@ password or vault data.
 - **PIN unlock is rate-limited**: five wrong PINs destroy the PIN envelope and force the master
   password. With *require master password after restart* (the default) the envelope only ever
   lives in RAM.
+- **Windows Hello protects the key cryptographically**: a fresh Hello signature over an enrollment
+  challenge derives the AES-256-GCM wrapping key. The signature and derived key are never cached.
+  Optional persistence adds RSA-OAEP-SHA256 protection from a non-exportable RSA-2048 key in the
+  Microsoft Platform Crypto Provider; enrollment requires a hardware provider and never falls back
+  to a software TPM key. The envelope is bound to its account, server, email and enrollment.
 - **Minimal supply chain**: a single Microsoft-published NuGet package (`System.Formats.Cbor`).
   Argon2id and Ed25519 are implemented in VaultType itself instead of pulling third-party DLLs -
   which also means the app runs on WDAC-locked machines that only allow Microsoft-signed binaries.
@@ -467,6 +474,38 @@ Group names are `CardNumber`, `CardHolder`, `CardExpMonth`, `CardExpYear`, `Card
 > there (some Qt and Java programs) can't be filled this way; VaultType says so instead of guessing.
 > Nothing is ever written through that interface: values are always typed as keystrokes, so secrets
 > keep going through the same locked-memory path as before.
+
+## Windows Hello unlock
+
+When adding a vault, or under *Settings -> Accounts -> Edit*, select **Windows Hello** under
+*Unlock in the future with*, then sign in with your master password. Configure Windows Hello in
+Windows Settings first; fingerprint, face and the Windows Hello PIN are supported. This is separate
+from VaultType's own PIN unlock and from the Hello verification used by the passkey provider.
+
+- By default the encrypted Hello envelope stays in RAM. After restarting VaultType or Windows,
+  unlock once with the master password and complete Hello enrollment again. Subsequent locks can
+  be unlocked with Hello.
+- Enable **Keep Windows Hello available after restart (TPM)** to persist the envelope. A usable TPM
+  with RSA-2048/OAEP-SHA256 support is required. If enrollment fails or is canceled, VaultType tells
+  you and leaves master-password unlock selected; it does not silently use weaker persistence.
+- Each unlock still requires Hello and a connection to the vault server. This does not add offline
+  vault storage or automatic unlock on startup.
+- The unlock window always offers **Use master password**. If Hello is reset, a credential is
+  missing, the TPM is cleared/replaced, or the envelope is damaged, use that fallback to enroll
+  again. A rejected refresh token or a changed server-side key still requires signing in again.
+- SSH/passkey requests use the same unlock flow. Entries with master-password reprompt enabled
+  still require the master password after a Hello unlock.
+- Changing the unlock method or removing the account removes its Hello envelope and attempts to
+  delete its Windows Hello/TPM keys. Windows manages these OS keys outside VaultType's data folder;
+  deleting the folder alone does not remove them. An interrupted cleanup can leave an unused OS
+  key, without the envelope needed to unlock the vault.
+
+TPM persistence is device- and Windows-user-specific. Keep your master password available when
+moving machines, reinstalling Windows or changing Windows Hello/TPM configuration. As with the
+rest of the app, it cannot protect secrets against a compromised running process or administrator.
+
+Native validation steps and the portable envelope tests are in
+[Windows Hello testing](docs/windows-hello-testing.md).
 
 ## SSH agent
 

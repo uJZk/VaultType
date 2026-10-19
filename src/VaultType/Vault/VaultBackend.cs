@@ -10,7 +10,7 @@ using VaultType.Vault.Models;
 namespace VaultType.Vault;
 
 public enum LoginStatus { Success, TwoFactorRequired, NewDeviceVerificationRequired, ServerUnreachable, Failed }
-public enum UnlockStatus { Success, WrongPassword, NeedsLogin, ServerUnreachable, Failed }
+public enum UnlockStatus { Success, WrongPassword, NeedsLogin, ServerUnreachable, Failed, HelloUnavailable, Canceled }
 
 public sealed class LoginResult
 {
@@ -45,6 +45,8 @@ public sealed class VaultBackend : IDisposable
     private string _deviceId;
 
     private bool _mockUnlocked;
+    private HelloEnvelope? _hello; // default Hello enrollment: ciphertext kept only until app exit
+    private int _lockVersion; // invalidates an in-flight Hello operation when the vault is locked
 
     public SecretProtector? Protector { get; private set; }
     public List<VaultItem> Items { get; private set; } = new();
@@ -170,6 +172,10 @@ public sealed class VaultBackend : IDisposable
         _crypto = new AccountCrypto();
         _crypto.Unlock(masterKey, userKeyEnc, privKeyEnc, sync.Profile?.Organizations ?? new());
 
+        // A sign-in may change the server, identity or user key. Old local unlock credentials
+        // must not survive that change, even when the newly chosen method is the master password.
+        await RemoveHelloAsync().ConfigureAwait(false);
+        RemovePin();
         SaveState(email, kdf, userKeyEnc, privKeyEnc);
         DecryptAll(sync);
         var st = PersistedSession.Load(_statePath);
@@ -222,6 +228,126 @@ public sealed class VaultBackend : IDisposable
             if (keysSwapped && !unlocked) AbandonUnlock();
             if (masterKey != null) CryptographicOperations.ZeroMemory(masterKey);
             CryptographicOperations.ZeroMemory(masterPassword);
+        }
+    }
+
+    // ---- Windows Hello unlock ----
+
+    private HelloEnvelope? HelloState => _acc.HelloPersistAcrossRestart
+        ? PersistedSession.Load(_statePath)?.Hello : _hello;
+
+    public bool HelloAvailable => HelloState is { IsValid: true } envelope
+        && envelope.TpmProtected == _acc.HelloPersistAcrossRestart;
+
+    // Only called after a successful master-password sign-in/unlock. Persist ciphertext only when
+    // the user explicitly opted into TPM persistence; the signing/derived key is never cached.
+    public async Task EnrollHelloAsync()
+    {
+        int lockVersion;
+        lock (_decryptGate)
+        {
+            if (_crypto?.IsUnlocked != true) throw new InvalidOperationException("Account is locked.");
+            lockVersion = _lockVersion;
+        }
+        byte[] ExportUserKey()
+        {
+            lock (_decryptGate)
+            {
+                if (_lockVersion != lockVersion || _crypto?.IsUnlocked != true) throw new OperationCanceledException();
+                return _crypto.ExportUserKeyRaw();
+            }
+        }
+        HelloEnvelope? next = null;
+        var previous = HelloState;
+        try
+        {
+            next = await WindowsHelloKey.EnrollAsync(_acc.Id, _acc.ServerUrl, _acc.AccountEmail,
+                ExportUserKey, _acc.HelloPersistAcrossRestart).ConfigureAwait(false);
+            lock (_decryptGate)
+            {
+                if (_lockVersion != lockVersion || _crypto?.IsUnlocked != true) throw new OperationCanceledException();
+                var state = PersistedSession.Load(_statePath) ?? throw new InvalidOperationException("No persisted session.");
+                state.Hello = next.TpmProtected ? next : null;
+                state.Save(_statePath);
+                _hello = next.TpmProtected ? null : next;
+            }
+        }
+        catch
+        {
+            if (next != null) await WindowsHelloKey.DeleteAsync(_acc.Id, next).ConfigureAwait(false);
+            throw;
+        }
+        if (previous != null) await WindowsHelloKey.DeleteAsync(_acc.Id, previous).ConfigureAwait(false);
+    }
+
+    public async Task RemoveHelloAsync()
+    {
+        var ram = _hello;
+        var state = PersistedSession.Load(_statePath);
+        var disk = state?.Hello;
+        if (disk != null)
+        {
+            state!.Hello = null;
+            state.Save(_statePath);
+        }
+        _hello = null;
+        if (ram != null) await WindowsHelloKey.DeleteAsync(_acc.Id, ram).ConfigureAwait(false);
+        if (disk != null) await WindowsHelloKey.DeleteAsync(_acc.Id, disk).ConfigureAwait(false);
+    }
+
+    public async Task<UnlockStatus> UnlockWithHelloAsync(CancellationToken ct = default)
+    {
+        byte[]? raw = null;
+        AccountCrypto? crypto = null;
+        int lockVersion;
+        lock (_decryptGate) lockVersion = _lockVersion;
+        bool keysSwapped = false, unlocked = false;
+        try
+        {
+            var state = PersistedSession.Load(_statePath);
+            if (state?.RefreshToken == null) return UnlockStatus.NeedsLogin;
+            var envelope = HelloState;
+            if (envelope?.IsValid != true || envelope.TpmProtected != _acc.HelloPersistAcrossRestart)
+                return UnlockStatus.HelloUnavailable;
+
+            // Fetch encrypted data before prompting. No unwrapped vault key or signing-derived
+            // secret needs to stay in memory while we wait for the network.
+            _refreshToken = state.RefreshToken;
+            if (!await RefreshAccessTokenAsync(ct).ConfigureAwait(false)) return UnlockStatus.NeedsLogin;
+            var (sync, _) = await Api().SyncAsync(_accessToken!, ct).ConfigureAwait(false);
+            // A server-side key rotation invalidates the persisted password/Hello envelopes.
+            // A fresh sign-in fetches current KDF/profile keys before enrolling again.
+            if (sync.Profile?.Key is string current && current != state.ProtectedUserKey)
+                return UnlockStatus.NeedsLogin;
+            lock (_decryptGate) { if (_lockVersion != lockVersion) return UnlockStatus.Canceled; }
+            raw = await WindowsHelloKey.UnwrapAsync(_acc.Id, _acc.ServerUrl, _acc.AccountEmail, envelope).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+            if (raw.Length is not (32 or 64)) return UnlockStatus.HelloUnavailable;
+            crypto = new AccountCrypto();
+            crypto.UnlockWithUserKeyRaw((byte[])raw.Clone(),
+                sync.Profile?.PrivateKey ?? state.ProtectedPrivateKey, sync.Profile?.Organizations ?? new());
+            lock (_decryptGate)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (_lockVersion != lockVersion) return UnlockStatus.Canceled;
+                _crypto?.Dispose();
+                _crypto = crypto;
+                crypto = null;
+                keysSwapped = true;
+                DecryptAll(sync);
+                unlocked = true;
+            }
+            return UnlockStatus.Success;
+        }
+        catch (OperationCanceledException) { return UnlockStatus.Canceled; }
+        catch (ServerUnreachableException) { return UnlockStatus.ServerUnreachable; }
+        catch (HttpRequestException) { return UnlockStatus.Failed; }
+        catch (Exception) { return UnlockStatus.HelloUnavailable; }
+        finally
+        {
+            crypto?.Dispose();
+            if (keysSwapped && !unlocked) Lock();
+            if (raw != null) CryptographicOperations.ZeroMemory(raw);
         }
     }
 
@@ -502,21 +628,27 @@ public sealed class VaultBackend : IDisposable
 
     public void Lock()
     {
-        _crypto?.Dispose(); _crypto = null;
-        Protector?.Dispose(); Protector = null;
-        Items = new List<VaultItem>();
-        SshKeys = new List<SshKeyEntry>();
-        Passkeys = new List<Fido2Entry>();
-        _ciphers = new List<CipherModel>();
-        _accessToken = null;
-        // Keep the persisted session (refresh token + protected keys) so the vault can be unlocked
-        // again without a full sign-in.
+        lock (_decryptGate)
+        {
+            _lockVersion++;
+            _crypto?.Dispose(); _crypto = null;
+            Protector?.Dispose(); Protector = null;
+            Items = new List<VaultItem>();
+            SshKeys = new List<SshKeyEntry>();
+            Passkeys = new List<Fido2Entry>();
+            _ciphers = new List<CipherModel>();
+            _accessToken = null;
+            // Keep the persisted session (refresh token + protected keys) so the vault can be unlocked
+            // again without a full sign-in.
+        }
     }
 
     public void Logout()
     {
         Lock();
         _refreshToken = null;
+        try { Task.Run(RemoveHelloAsync).GetAwaiter().GetResult(); } catch { }
+        lock (EphemeralPinEnvelopes) EphemeralPinEnvelopes.Remove(_acc.Id);
         PersistedSession.Delete(_statePath);
         SshKeyMeta.Delete(_acc.SshMetaPath);
         PasskeyMeta.Delete(_acc.PasskeyMetaPath);
@@ -646,6 +778,13 @@ public sealed class VaultBackend : IDisposable
 
     public void Dispose()
     {
+        // RAM-only envelopes cannot be recovered after exit, so their OS credentials can go too.
+        var hello = _hello;
+        _hello = null;
+        if (hello != null)
+        {
+            try { Task.Run(() => WindowsHelloKey.DeleteAsync(_acc.Id, hello)).GetAwaiter().GetResult(); } catch { }
+        }
         _crypto?.Dispose();
         Protector?.Dispose();
         _api?.Dispose();

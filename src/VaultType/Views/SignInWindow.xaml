@@ -238,6 +238,24 @@
                     </StackPanel>
                 </StackPanel>
 
+                <StackPanel x:Name="HelloGroup" Margin="0,16,0,0" Visibility="Collapsed">
+                    <TextBlock Text="{local:Tr hello.hint}" Foreground="{StaticResource TextSecondary}"
+                               FontSize="12.5" TextWrapping="Wrap" />
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{local:Tr hello.persist}" Foreground="{StaticResource TextLabel}"
+                                   FontSize="12.5" TextWrapping="Wrap" VerticalAlignment="Center" />
+                        <ToggleButton x:Name="HelloPersistTgl" Grid.Column="2" Style="{StaticResource ToggleSwitch}"
+                                      VerticalAlignment="Center" Click="HelloPersist_Click" />
+                    </Grid>
+                    <TextBlock Text="{local:Tr hello.persistHint}" Foreground="{StaticResource TextSecondary}"
+                               FontSize="12" TextWrapping="Wrap" Margin="0,8,0,0" />
+                </StackPanel>
+
                 <!-- Anzeige (avatar + vault name) -->
                 <StackPanel Margin="0,22,0,0">
                     <TextBlock Text="{local:Tr signin.display}" Foreground="{StaticResource TextLabel}" FontSize="12.5" FontWeight="SemiBold" />
