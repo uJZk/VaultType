@@ -124,6 +124,14 @@ persistence toggle and the supported Hello methods, but removes the persistence 
 its unused localization key from all 11 locales. Persistence defaults, hardware requirements and
 cryptography are unchanged.
 
-Beta 3 will package this UI revision without replacing either earlier beta. Its restored Settings
-stacking has not yet been tested on the user's device. Continue the remaining hardware acceptance
-checks in [the checklist](windows-hello-testing.md).
+[Beta 3](https://github.com/uJZk/VaultType/releases/tag/v1.2.4-beta.3) packages this UI revision
+from `3bbbdb9ef5abca85c419d5c810113cc9bc9d4c36` without replacing either earlier beta. Its MSIX
+package version is `1.2.4.3`. The Release cross-build passed with zero warnings/errors; locale key
+sets/placeholders and whitespace checks passed. All 34 tests passed on Windows in both
+[CI](https://github.com/uJZk/VaultType/actions/runs/39355118310) and the
+[portable/installer release](https://github.com/uJZk/VaultType/actions/runs/39355117964). The
+[MSIX workflow](https://github.com/uJZk/VaultType/actions/runs/39355286465) builds the same tag,
+checks the signature and manifest version before uploading the package and its matching certificate.
+
+Its restored Settings stacking has not yet been tested on the user's device. Continue the
+remaining hardware acceptance checks in [the checklist](windows-hello-testing.md).

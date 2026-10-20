@@ -55,8 +55,9 @@ Argon2id accounts where available. No Windows Hello or TPM hardware checks can r
     Check that canceling account edits leaves the current method usable.
 12. Repeat enrollment/unlock in portable and MSIX editions. Verify localization, keyboard focus,
     master-password fallback layout, small-screen scrolling and existing password/PIN unlock.
-13. Re-test the reported endless prompt after saving an account. Settings must allow another app
-    above it; native Hello must cover VaultType. Initial enrollment may prompt for both creation
+    The TPM persistence toggle remains visible without explanatory text below or above it.
+13. Re-test the reported endless prompt after saving an account. Settings retains its original
+    topmost behavior at the user’s request; native Hello must remain visible and usable. Initial enrollment may prompt for both creation
     and signing, but it must finish or cancel. Cancel must return to password unlock without an
     automatic retry. A stuck native operation has a two-minute deadline. If it still fails, record
     the `HELLO_CREATE` / `HELLO_SIGN` stage and error shown; passing coordinator tests alone does
