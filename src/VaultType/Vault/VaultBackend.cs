@@ -320,7 +320,7 @@ public sealed class VaultBackend : IDisposable
             if (sync.Profile?.Key is string current && current != state.ProtectedUserKey)
                 return UnlockStatus.NeedsLogin;
             lock (_decryptGate) { if (_lockVersion != lockVersion) return UnlockStatus.Canceled; }
-            raw = await WindowsHelloKey.UnwrapAsync(_acc.Id, _acc.ServerUrl, _acc.AccountEmail, envelope).ConfigureAwait(false);
+            raw = await WindowsHelloKey.UnwrapAsync(_acc.Id, _acc.ServerUrl, _acc.AccountEmail, envelope, ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
             if (raw.Length is not (32 or 64)) return UnlockStatus.HelloUnavailable;
             crypto = new AccountCrypto();

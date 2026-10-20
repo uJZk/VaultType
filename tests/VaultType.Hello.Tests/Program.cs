@@ -29,6 +29,12 @@ void Check(string name, Action test)
     catch (Exception ex) { failed++; Console.WriteLine($"FAIL {name}: {ex.Message}"); }
 }
 
+async Task CheckAsync(string name, Func<Task> test)
+{
+    try { await test(); passed++; Console.WriteLine($"PASS {name}"); }
+    catch (Exception ex) { failed++; Console.WriteLine($"FAIL {name}: {ex.Message}"); }
+}
+
 void Require(bool ok)
 {
     if (!ok) throw new Exception("Assertion failed.");
@@ -133,6 +139,82 @@ try
         string json = JsonSerializer.Serialize(Make());
         Require(!json.Contains(Convert.ToBase64String(raw)) && !json.Contains(Convert.ToBase64String(key)));
         Require(!json.Contains("IsValid"));
+    });
+
+    await CheckAsync("concurrent Hello is rejected, never queued or started", async () =>
+    {
+        var gate = new HelloPromptCoordinator(TimeSpan.FromSeconds(5));
+        var finish = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        int calls = 0;
+        var first = gate.RunAsync(_ => { calls++; return finish.Task; });
+        try
+        {
+            try { await gate.RunAsync(_ => { calls++; return Task.FromResult(2); }); throw new Exception("Duplicate prompt accepted."); }
+            catch (OperationCanceledException) { }
+            Require(calls == 1);
+        }
+        finally { finish.TrySetResult(1); }
+        Require(await first == 1);
+        Require(await gate.RunAsync(_ => Task.FromResult(3)) == 3);
+    });
+
+    await CheckAsync("Hello exception releases the gate without retry", async () =>
+    {
+        var gate = new HelloPromptCoordinator(TimeSpan.FromSeconds(5));
+        int calls = 0;
+        try
+        {
+            await gate.RunAsync<int>(_ => { calls++; throw new CryptographicException(); });
+            throw new Exception("Failure was swallowed.");
+        }
+        catch (CryptographicException) { }
+        Require(calls == 1 && await gate.RunAsync(_ => Task.FromResult(true)));
+    });
+
+    await CheckAsync("pre-canceled Hello never starts authentication", async () =>
+    {
+        var gate = new HelloPromptCoordinator(TimeSpan.FromSeconds(5));
+        using var canceled = new CancellationTokenSource();
+        canceled.Cancel();
+        bool started = false;
+        try
+        {
+            await gate.RunAsync(_ => { started = true; return Task.FromResult(true); }, canceled.Token);
+            throw new Exception("Cancellation was ignored.");
+        }
+        catch (OperationCanceledException) { }
+        Require(!started && await gate.RunAsync(_ => Task.FromResult(true)));
+    });
+
+    await CheckAsync("user cancellation is propagated once without retry", async () =>
+    {
+        var gate = new HelloPromptCoordinator(TimeSpan.FromSeconds(5));
+        using var canceled = new CancellationTokenSource();
+        int calls = 0;
+        var pending = gate.RunAsync(async ct => { calls++; await Task.Delay(Timeout.Infinite, ct); return true; }, canceled.Token);
+        canceled.Cancel();
+        try { await pending.WaitAsync(TimeSpan.FromSeconds(5)); throw new Exception("Cancellation was ignored."); }
+        catch (OperationCanceledException) { }
+        Require(calls == 1 && await gate.RunAsync(_ => Task.FromResult(true)));
+    });
+
+    await CheckAsync("deadline cancels the operation and allows a later explicit attempt", async () =>
+    {
+        var gate = new HelloPromptCoordinator(TimeSpan.FromMilliseconds(40));
+        bool operationCanceled = false;
+        int calls = 0;
+        try
+        {
+            await gate.RunAsync(async ct =>
+            {
+                calls++;
+                try { await Task.Delay(Timeout.Infinite, ct); return true; }
+                finally { operationCanceled = ct.IsCancellationRequested; }
+            }).WaitAsync(TimeSpan.FromSeconds(5));
+            throw new Exception("Deadline was ignored.");
+        }
+        catch (TimeoutException) { }
+        Require(operationCanceled && calls == 1 && await gate.RunAsync(_ => Task.FromResult(true)));
     });
 }
 finally

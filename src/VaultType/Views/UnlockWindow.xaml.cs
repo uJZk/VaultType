@@ -143,11 +143,13 @@ public partial class UnlockWindow : Window
             if (HelloUnlock == null) { UseMasterPassword(); ShowError(Loc.T("hello.failed")); return; }
             Error.Visibility = Visibility.Collapsed;
             _helloBusy = true;
+            bool wasTopmost = Topmost;
+            Topmost = false; // the system Hello dialog must be able to cover this window
             IsEnabled = false;
             UnlockStatus status;
             try { status = await HelloUnlock(); }
             catch { status = UnlockStatus.HelloUnavailable; }
-            finally { _helloBusy = false; IsEnabled = true; }
+            finally { _helloBusy = false; IsEnabled = true; Topmost = wasTopmost; }
             if (status is UnlockStatus.Success or UnlockStatus.NeedsLogin)
             {
                 HelloResult = status;
